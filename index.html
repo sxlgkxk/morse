@@ -1,0 +1,355 @@
+<html>
+	<!-- pm2 start "http-server -p 8001 -c-1" -->
+	<head>
+		<style type="text/css" rel="stylesheet">
+			*{
+				background-color:black;
+				color: #eee
+			}
+			span#text{
+				font-size: 48px;
+			}
+		</style>
+	</head>
+	<body>
+		<span id="text">
+		<script>
+			/*
+				1. 代码功能
+					用于闭眼时的笔记, 采用手柄+摩斯编码
+
+				2. 设置项
+					long_ms 	: 标准的长按是多少毫秒
+					short_ms 	: 标准的短按是多少毫秒
+					remain_rate : 
+					volume 		: 初始音量
+				
+				3. 按键设置
+					rt 	: 字符键入/点横
+					rb 	: 退格
+					lb 	: 音量加
+					lt 	: 音量减
+					start 	: 播报当前页面上的字串
+
+					xyab 	: 相当于一个记事本, 即总共可切换四个记事本
+					left 	: 相当于一个工作区, 左右可共切换0-9, 共10个工作区
+					right 	: 切换至下一个工作区
+					up 		: 播报当前工作区标号
+				
+				4. 其他说明
+					1. 工作区切换/记事本切换时均有语音提示
+					2. 没用上的键:
+						down
+						back
+						turbo
+						shift
+						左摇杆
+						右摇杆
+					3. 之前好像有标号错位什么的(比如左摇杆被识别为上下左右, 复现时看下)
+					4. 更高级的功能: 比如键入一串命令/命令识别支持(刷新页面什么的)
+					5. 屏幕上显示两行, 第一行为点横, 和竖线分隔符. 第二行为当前页面字串
+			*/
+			let long_ms=localStorage.getItem('long')
+			let short_ms=localStorage.getItem('short')
+			if(!long_ms) long_ms=300
+			if(!short_ms) short_ms=150
+			let remain_rate=0.9
+
+			let audio=new Audio()
+			audio.volume=0.5
+			
+			/*
+				按键监听:
+					pressed_ms 	: 按下的时间
+					released_ms : 松开的时间
+					interval_ms : 按下松开的间隔
+
+			*/
+			let pressed_ms=0
+			let released_ms=0
+			let interval_ms=10
+			let _pressed = false;
+			let _del_pressed = false;
+			let _left_pressed = false;
+			let _right_pressed = false;
+			let _up_pressed = false;
+			let _down_pressed = false;
+
+			/*
+				workspaceId: 
+			*/
+			workspaceId=localStorage.getItem('workspaceId')
+			if (!workspaceId){
+				workspaceId=0
+				localStorage.setItem('workspaceId',0)
+			}else workspaceId=parseInt(workspaceId)
+
+			/*
+				note: 
+			*/
+			let queue=[]
+			let note=localStorage.getItem('note')
+			if (!note){
+				note='a'
+				localStorage.setItem('note','a')
+			}
+
+			/*
+				trans_queue: 存放 ['A', 'B']形式的, 已键入的字符数组
+
+				有自动加载上次会话消息的功能
+			*/
+			trans_queue=localStorage.getItem(workspaceId+note)
+			if (!trans_queue){trans_queue=[]}
+			else trans_queue=JSON.parse(trans_queue)
+
+			/*
+				点横, 对应字符的对照表
+			*/
+			let map={
+				"·─":"A",
+				"─···":"B",
+				"─·─·":"C",
+				"─··":"D",
+				"·":"E",
+				"··─·":"F",
+				"──·":"G",
+				"····":"H",
+				"··":"I",
+				"·───":"J",
+				"─·─":"K",
+				"·─··":"L",
+				"──":"M",
+				"─·":"N",
+				"───":"O",
+				"·──·":"P",
+				"──·─":"Q",
+				"·─·":"R",
+				"···":"S",
+				"─":"T",
+				"··─":"U",
+				"···─":"V",
+				"·──":"W",
+				"─··─":"X",
+				"─·──":"Y",
+				"──··":"Z",
+
+				"·────":"1",
+				"··───":"2",
+				"···──":"3",
+				"····─":"4",
+				"·····":"5",
+				"─····":"6",
+				"──···":"7",
+				"───··":"8",
+				"────·":"9",
+				"─────":"0",
+
+				"·─·─·─":".",
+				"───···":":",
+				"──··──":",",
+				"─·─·─·":";",
+				"··──··":"?",
+				"─···─":"=",
+				"·────·":"'",
+				"─··─·":"/",
+				"─·─·──":"!",
+				"─····─":"─",
+				"··──·─":"_",
+				"·─··─·":"\"",
+				"─·──·":"(",
+				"─·──·─":")",
+				"···─··─":"$",
+				"·─···":"&",
+				"·──·─·":"@",
+				"·─·─·":"+"
+			}
+
+			let buttonMap={
+				'lt': 6,
+				'lb': 4,
+
+				'rt': 7,
+				'rb': 5,
+
+				'back': 8,
+				'start': 9,
+
+				'a': 0,
+				'b': 1,
+				'x': 2,
+				'y': 3,
+
+				'left': 14,
+				'right': 15,
+				'up': 12,
+			}
+			let noteList='abxy'
+
+			setInterval(function () {
+				let p=document.getElementById('text')
+				p.innerHTML=queue.join(' ')+'<br>'+trans_queue.join(' ')
+				let pad=navigator.getGamepads()[0]
+
+				/*
+					切换工作区
+						left
+						right
+				*/
+				let left_pressed=pad.buttons[buttonMap['left']].value
+				if(!_left_pressed && left_pressed){
+					if(workspaceId>0) workspaceId--;
+					localStorage.setItem('workspaceId',workspaceId)
+
+					trans_queue=localStorage.getItem(workspaceId+note)
+					if (!trans_queue){trans_queue=[]}
+					else trans_queue=JSON.parse(trans_queue)
+
+					audio.src='audio/'+workspaceId+'.mp3'
+					audio.play()
+				}
+				_left_pressed=left_pressed
+
+				let right_pressed=pad.buttons[buttonMap['right']].value
+				if(!_right_pressed && right_pressed){
+					if(workspaceId<9) workspaceId++;
+					localStorage.setItem('workspaceId',workspaceId)
+
+					trans_queue=localStorage.getItem(workspaceId+note)
+					if (!trans_queue){trans_queue=[]}
+					else trans_queue=JSON.parse(trans_queue)
+
+					audio.src='audio/'+workspaceId+'.mp3'
+					audio.play()
+				}
+				_right_pressed=right_pressed
+
+				/*
+					切换记事本
+				*/
+				for(i in noteList)
+					if(pad.buttons[buttonMap[noteList[i]]].value){
+						note=noteList[i]
+						localStorage.setItem('note', note)
+						trans_queue=localStorage.getItem(workspaceId+note)
+						if (!trans_queue){trans_queue=[]}
+						else trans_queue=JSON.parse(trans_queue)
+					}
+				
+				/*
+					1. 功能
+						audio play
+						audio volume up
+						audio volume down
+						play audio
+
+					2. 说明
+						1. volume调节范围: 0-1, 初始时为0.5
+						2. volume为0时则任何按键无效. 即, 当volume为0时相当于锁屏功能
+				*/
+				if(pad.buttons[buttonMap['up']].value){
+					audio.src='audio/'+workspaceId+'.mp3'
+					audio.play()
+				}
+
+				up_pressed=pad.buttons[buttonMap['lb']].value
+				if(!_up_pressed && up_pressed) audio.volume+=0.1
+				_up_pressed=up_pressed
+
+				down_pressed=pad.buttons[buttonMap['lt']].value
+				if(!_down_pressed && down_pressed) audio.volume-=0.1
+				_down_pressed=down_pressed
+
+				if (audio.volume<0.1) return
+
+				if(pad.buttons[buttonMap['start']].value){
+					audio.src='audio/'+trans_queue[0].toLowerCase()+'.mp3'
+					audio.play()
+
+					let index=1
+					audio.onended = () => {
+						if (index< trans_queue.length){
+							audio.src='audio/'+trans_queue[index].toLowerCase()+'.mp3'
+							audio.play()
+							index+=1;
+						}else index=10000000
+					}
+				}
+
+				/*
+					del/backspace
+				*/
+				del_pressed=pad.buttons[buttonMap['rb']].value
+				if(!_del_pressed && del_pressed){
+					trans_queue.pop()
+					localStorage.setItem(workspaceId+note, JSON.stringify(trans_queue))
+				}
+				_del_pressed=del_pressed
+
+				/*
+					1. 功能: 按键监听(用于拼写)
+						监听几个上升沿/下降沿
+							press down -> press up(即松开)
+								为长按
+								为短按
+							press up -> press down(即按下)
+							press down -> press down(即按住)
+							press up -> press up(即松手待机)
+								根据停顿间隔处理是否将当前moss码转化为字符
+				*/
+				let pressed=false
+				let val=pad.buttons[buttonMap['rt']].value
+				if (val> 0.5) pressed = true
+
+				// press down -> press up(即松开)
+				if (_pressed && !pressed) {
+					// console.log(pressed_ms)
+					if((pressed_ms> long_ms) || (long_ms-pressed_ms < pressed_ms-short_ms)){
+						// 为长按
+						queue.push('─')
+						long_ms=long_ms*remain_rate+ pressed_ms*(1-remain_rate)
+						// console.log('long: '+long_ms+' ms')
+						localStorage.setItem('long', long_ms)
+					}else{
+						// 为短按
+						queue.push('·')
+						short_ms=short_ms*remain_rate+ pressed_ms*(1-remain_rate)
+						// console.log('short: '+short_ms+' ms')
+						localStorage.setItem('short', short_ms)
+					}
+					pressed_ms=0;
+				}
+				// press up -> press down(即按下)
+				else if(!_pressed && pressed) {
+					pressed_ms=interval_ms;
+					released_ms=0;
+				}
+				// press down -> press down(即按住)
+				else if(_pressed && pressed) {
+					pressed_ms+=interval_ms;
+				}
+				// press up -> press up(即松手待机)
+				else{
+					released_ms+=interval_ms
+					if(released_ms==parseInt(2*long_ms/interval_ms)*interval_ms){
+						let src=queue.slice(queue.lastIndexOf('|')+1).join('')
+						// console.log(src)
+						let dst=map[src]
+						if (dst){
+							trans_queue.push(dst)
+							localStorage.setItem(workspaceId+note, JSON.stringify(trans_queue))
+							audio.src='audio/'+dst.toLowerCase()+'.mp3'
+							audio.play()
+							// console.log(dst)
+						}
+						queue.push('|')
+					}
+				}
+				_pressed=pressed
+
+			}, interval_ms)
+
+
+		</script>
+	</body>
+</html>
