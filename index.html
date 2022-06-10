@@ -75,7 +75,7 @@
 			let _left_pressed = false;
 			let _right_pressed = false;
 			let _up_pressed = false;
-			let _down_pressed = false;
+			let _down_pressed = false;		// 历史遗留问题, up/down其实代表lb/lt
 
 			/*
 				workspaceId: 
@@ -182,9 +182,10 @@
 				'x': 2,
 				'y': 3,
 
+				'up': 12,
+				'down': 13,
 				'left': 14,
 				'right': 15,
-				'up': 12,
 			}
 			let noteList='abxy'
 
@@ -349,6 +350,14 @@
 				}
 				_pressed=pressed
 
+				/*
+					随机数
+				*/
+				if(pad.buttons[buttonMap['back']].value){
+					let num=Math.floor(Math.floor(Math.random()*10))%10
+					audio.src=`audio/${num}.mp3`
+					audio.play()
+				}
 			}, interval_ms)
 
 
