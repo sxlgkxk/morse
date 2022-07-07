@@ -27,16 +27,16 @@
 					volume 		: 初始音量为0.5, 范围为0-1
 				
 				3. 按键设置
-					rt 	: 字符键入/点横
-					rb 	: 退格
+					rt 	: 字符键入/点横 	-> enter
+					rb 	: 退格				-> del
 					lb 	: 音量加
 					lt 	: 音量减
-					start 	: 播报当前页面上的字串
+					start 	: 播报当前页面上的字串	-> |
 
-					xyab 	: 相当于一个记事本, 即总共可切换四个记事本
-					left 	: 相当于一个工作区, 左右可共切换0-9, 共10个工作区
-					right 	: 切换至下一个工作区
-					up 		: 播报当前工作区标号
+					xyab 	: 相当于一个记事本, 即总共可切换四个记事本	-> home/end/pgup/pgdn
+					left 	: 相当于一个工作区, 左右可共切换0-9, 共10个工作区	-> left
+					right 	: 切换至下一个工作区							-> right
+					up 		: 播报当前工作区标号							-> up
 				
 				4. 其他说明
 					1. 工作区切换/记事本切换时均有语音提示
@@ -189,17 +189,30 @@
 			}
 			let noteList='abxy'
 
+			// pc按键
+			var pressedKeys = {};
+			window.onkeyup = function(e) { pressedKeys[e.key] = false; console.log(e.key) };
+			window.onkeydown = function(e) { pressedKeys[e.key] = true; }
+
 			setInterval(function () {
 				let p=document.getElementById('text')
 				p.innerHTML=queue.join(' ')+'<br>'+trans_queue.join(' ')
-				let pad=navigator.getGamepads()[0]
+				let pad;
+				try {
+					pad=navigator.getGamepads()[0]
+					if(!pad) throw 1
+				} catch (error) {
+					pad={buttons:{}}
+					for(let key in buttonMap)
+						pad.buttons[buttonMap[key]]={value:0}
+				}
 
 				/*
 					切换工作区
 						left
 						right
 				*/
-				let left_pressed=pad.buttons[buttonMap['left']].value
+				let left_pressed=(pad.buttons[buttonMap['left']].value || pressedKeys['ArrowLeft'])
 				if(!_left_pressed && left_pressed){
 					if(workspaceId>0) workspaceId--;
 					localStorage.setItem('workspaceId',workspaceId)
@@ -213,7 +226,7 @@
 				}
 				_left_pressed=left_pressed
 
-				let right_pressed=pad.buttons[buttonMap['right']].value
+				let right_pressed=pad.buttons[buttonMap['right']].value ||pressedKeys['ArrowRight']
 				if(!_right_pressed && right_pressed){
 					if(workspaceId<9) workspaceId++;
 					localStorage.setItem('workspaceId',workspaceId)
@@ -238,6 +251,21 @@
 						if (!trans_queue){trans_queue=[]}
 						else trans_queue=JSON.parse(trans_queue)
 					}
+
+				let notelistMapping={
+					"Home": "a",
+					"End": "b",
+					"PageDown": "c",
+					"PageUp": "d",
+				}
+				for(let key of ["Home", "End", "PageDown", "PageUp"])
+					if(pressedKeys[key]){
+						note=notelistMapping[key]
+						localStorage.setItem('note', note)
+						trans_queue=localStorage.getItem(workspaceId+note)
+						if (!trans_queue){trans_queue=[]}
+						else trans_queue=JSON.parse(trans_queue)
+					}
 				
 				/*
 					1. 功能
@@ -250,7 +278,7 @@
 						1. volume调节范围: 0-1, 初始时为0.5
 						2. volume为0时则任何按键无效. 即, 当volume为0时相当于锁屏功能
 				*/
-				if(pad.buttons[buttonMap['up']].value){
+				if(pad.buttons[buttonMap['up']].value || pressedKeys['ArrowUp']){
 					audio.src='audio/'+workspaceId+'.mp3'
 					audio.play()
 				}
@@ -265,7 +293,7 @@
 
 				if (audio.volume<0.1) return
 
-				if(pad.buttons[buttonMap['start']].value){
+				if(pad.buttons[buttonMap['start']].value || pressedKeys['\\']){
 					audio.src='audio/'+trans_queue[0].toLowerCase()+'.mp3'
 					audio.play()
 
@@ -282,7 +310,7 @@
 				/*
 					del/backspace
 				*/
-				del_pressed=pad.buttons[buttonMap['rb']].value
+				del_pressed=pad.buttons[buttonMap['rb']].value || pressedKeys['Delete']
 				if(!_del_pressed && del_pressed){
 					trans_queue.pop()
 					localStorage.setItem(workspaceId+note, JSON.stringify(trans_queue))
@@ -301,7 +329,7 @@
 								根据停顿间隔处理是否将当前moss码转化为字符
 				*/
 				let pressed=false
-				let val=pad.buttons[buttonMap['rt']].value
+				let val=pad.buttons[buttonMap['rt']].value || pressedKeys['Enter']
 				if (val> 0.5) pressed = true
 
 				// press down -> press up(即松开)
@@ -353,7 +381,7 @@
 				/*
 					随机数
 				*/
-				if(pad.buttons[buttonMap['back']].value){
+				if(pad.buttons[buttonMap['back']].value || pressedKeys['Insert']){
 					let num=Math.floor(Math.floor(Math.random()*10))%10
 					audio.src=`audio/${num}.mp3`
 					audio.play()
