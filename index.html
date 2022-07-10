@@ -4,7 +4,8 @@
 		<style type="text/css" rel="stylesheet">
 			*{
 				background-color:black;
-				color: #eee
+				color: #eee;
+				overflow: hidden;
 			}
 			span#text{
 				font-size: 48px;
@@ -196,7 +197,7 @@
 
 			setInterval(function () {
 				let p=document.getElementById('text')
-				p.innerHTML=queue.join(' ')+'<br>'+trans_queue.join(' ')
+				p.innerHTML=trans_queue.join(' ')+'<br>'+queue.join(' ')
 				let pad;
 				try {
 					pad=navigator.getGamepads()[0]
